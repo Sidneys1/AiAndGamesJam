@@ -3,14 +3,21 @@ using Microsoft.Xna.Framework.Graphics;
 using System.Diagnostics;
 using System;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace AiAndGamesJam {
+
     public class DebugComponent : DrawableGameComponent {
+        public delegate string DebugCallback();
+
         private readonly CircularBuffer<long> _fps = new(120);
         private readonly CircularBuffer<long> _ticks = new(120);
         DateTime _last_frame;
         private SpriteFont _perfectVga;
-        private Texture2D _pixel;
+        public Texture2D _pixel;
+
+        private readonly List<DebugCallback> _debugLines = new();
+
 
         private readonly AntGame _game;
         public DebugComponent(AntGame game) : base(game) {
@@ -19,12 +26,11 @@ namespace AiAndGamesJam {
 #endif
             _game = game;
         }
+
         protected override void LoadContent() {
             Trace.WriteLine("Loading debug component content...");
 
             _perfectVga = ContentManager.GetFont("perfect_dos");
-            Trace.Assert(_perfectVga != null, "Could not load font...");
-
             _pixel = new Texture2D(_game.GraphicsDevice, 1, 1, false, SurfaceFormat.Color);
             _pixel.SetData(new Color[] { Color.White });
         }
@@ -71,6 +77,16 @@ namespace AiAndGamesJam {
             var fps = 1 / (_fps.Average() / TimeSpan.TicksPerSecond);
             var tps = _ticks.IsEmpty ? 0.0 : 1 / (_ticks.Average() / TimeSpan.TicksPerSecond);
             _game.SpriteBatch.DrawString(_perfectVga, $"{fps:0.00}fps / {tps:0.00}tps".Replace('∞', '?'), Vector2.Zero, Color.White);
+            Vector2 pos = new(0, 50);
+            foreach (var debugCallback in _debugLines) {
+                var str = debugCallback();
+                _game.SpriteBatch.DrawString(_perfectVga, str, pos, Color.LightGray);
+                pos += new Vector2(0, 20);
+            }
         }
+
+        public void AddDebugLine(DebugCallback cb) => _debugLines.Add(cb);
+
+        internal bool RemoveDebugLine(DebugCallback cb) => _debugLines.Remove(cb);
     }
 }
