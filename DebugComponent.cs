@@ -17,6 +17,7 @@ namespace AiAndGamesJam {
         public Texture2D _pixel;
 
         private readonly List<DebugCallback> _debugLines = new();
+        private readonly List<string> _cachedDebugLines = new();
 
 
         private readonly AntGame _game;
@@ -42,9 +43,17 @@ namespace AiAndGamesJam {
             }
         }
 
+        private double _lastDebugUpdate = 0;
+
         public override void Update(GameTime gameTime) {
             if (!Enabled) return;
             _ticks.PushFront(gameTime.ElapsedGameTime.Ticks);
+
+            if ((gameTime.TotalGameTime.TotalSeconds - _lastDebugUpdate) > 0.1) {
+                _cachedDebugLines.Clear();
+                _cachedDebugLines.AddRange(_debugLines.Select(debugCallback => debugCallback()));
+                _lastDebugUpdate = gameTime.TotalGameTime.TotalSeconds;
+            }
         }
 
         const long target = TimeSpan.TicksPerSecond / 60;
@@ -78,15 +87,17 @@ namespace AiAndGamesJam {
             var tps = _ticks.IsEmpty ? 0.0 : 1 / (_ticks.Average() / TimeSpan.TicksPerSecond);
             _game.SpriteBatch.DrawString(_perfectVga, $"{fps:0.00}fps / {tps:0.00}tps".Replace('∞', '?'), Vector2.Zero, Color.White);
             Vector2 pos = new(0, 50);
-            foreach (var debugCallback in _debugLines) {
-                var str = debugCallback();
+            foreach (var str in _cachedDebugLines) {
                 _game.SpriteBatch.DrawString(_perfectVga, str, pos, Color.LightGray);
                 pos += new Vector2(0, 20);
             }
         }
 
-        public void AddDebugLine(DebugCallback cb) => _debugLines.Add(cb);
+        public void AddDebugLine(DebugCallback cb) =>
+            _debugLines.Add(cb);
 
-        internal bool RemoveDebugLine(DebugCallback cb) => _debugLines.Remove(cb);
+
+        internal bool RemoveDebugLine(DebugCallback cb) =>
+            _debugLines.Remove(cb);
     }
 }
