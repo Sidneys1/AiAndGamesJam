@@ -8,6 +8,7 @@ namespace AiAndGamesJam {
         static readonly Dictionary<string, Texture2D> _textures = new() {
             { "anthill", null },
             { "ant", null },
+            { "food", null },
         };
 
         static readonly Dictionary<string, SpriteFont> _fonts = new() {
