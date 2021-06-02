@@ -15,7 +15,7 @@ namespace AiAndGamesJam {
         DateTime _last_frame;
         private SpriteFont _perfectVga;
         public Texture2D _pixel;
-
+        public Vector2? Offset = null;
         private readonly List<DebugCallback> _debugLines = new();
         private readonly List<string> _cachedDebugLines = new();
 
@@ -71,6 +71,8 @@ namespace AiAndGamesJam {
 
 
             var count = Math.Min(_fps.Size, 60);
+            Vector2 offset = Offset.GetValueOrDefault();
+            Vector2 pos = offset;
             for (int i = 0; i < count; i++) {
                 var frame = _fps[i];
                 var color = Color.Green;
@@ -80,13 +82,16 @@ namespace AiAndGamesJam {
                 else if (diff > TimeSpan.TicksPerMillisecond * 2)
                     color = Color.Red;
                 var ms = frame / TimeSpan.TicksPerMillisecond;
-                _game.SpriteBatch.Draw(_pixel, new Rectangle(5 * i, 0, 3, (int)(ms * 2)), null, color, 0, Vector2.Zero, SpriteEffects.None, 0);
+
+                _game.SpriteBatch.Draw(_pixel, new Rectangle(pos.ToPoint(), new Point(3, (int)(ms * 2))), null, color, 0, Vector2.Zero, SpriteEffects.None, 0);
+                pos.X += 5;
             }
 
             var fps = 1 / (_fps.Average() / TimeSpan.TicksPerSecond);
             var tps = _ticks.IsEmpty ? 0.0 : 1 / (_ticks.Average() / TimeSpan.TicksPerSecond);
-            _game.SpriteBatch.DrawString(_perfectVga, $"{fps:0.00}fps / {tps:0.00}tps".Replace('∞', '?'), Vector2.Zero, Color.White);
-            Vector2 pos = new(0, 50);
+            _game.SpriteBatch.DrawString(_perfectVga, $"{fps:0.00}fps / {tps:0.00}tps".Replace('∞', '?'), offset, Color.White);
+            pos = offset;
+            pos.Y += 50;
             foreach (var str in _cachedDebugLines) {
                 _game.SpriteBatch.DrawString(_perfectVga, str, pos, Color.LightGray);
                 pos += new Vector2(0, 20);

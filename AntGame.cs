@@ -12,7 +12,7 @@ namespace AiAndGamesJam {
     public class AntGame : Game {
         const int MAX_ANTITIES = 1_000;
         const int MAX_THINGS = 1_000;
-        const int ANT_SPEED = 100;
+        const int ANT_SPEED = 200;
 
         private Color ANT_MIDDLE_AGE = new(10, 10, 10);
         private Color ANT_OLD_AGE = new(20, 20, 20);
@@ -138,12 +138,20 @@ namespace AiAndGamesJam {
 
             _input = new InputManager(this);
 
-            _debug = new DebugComponent(this);
+            _debug = new DebugComponent(this) {
+                Offset = new Vector2(200, 0)
+            };
             _debug.AddDebugLine(() => $"Entity Slots: {_antitiesSet.GetCardinality()} used/{_rightmostAntity + 1} allocated/{MAX_ANTITIES} max");
-            _debug.AddDebugLine(() => $"Thing Slots: {_thingsSet.GetCardinality()} used/{_rightmostThing + 1} allocated/{MAX_THINGS} max");
+            _debug.AddDebugLine(() => $" Thing Slots: {_thingsSet.GetCardinality()} used/{_rightmostThing + 1} allocated/{MAX_THINGS} max");
+            _debug.AddDebugLine(() => $"        Jobs: {_jobs.Count}");
+            _debug.AddDebugLine(() => {
+                var ret = $"   Expensive: {_expensiveDebug}";
+                _expensiveDebug = 0;
+                return ret;
+            });
 
-            AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(400, 300), action: Actions.NewAnts, coolDown: 1.0, value: 100);
-            AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(200, 300), action: Actions.NewAnts, coolDown: 1.0);
+            AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(400, 300), action: Actions.NewAnts, coolDown: 5.0 * _rand.NextDouble(), value: 105);
+            AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(200, 300), action: Actions.NewAnts, coolDown: 5.0 * _rand.NextDouble(), value: 105);
             for (int i = 0; i < 5; i++) {
                 AddThing(ThingType.Food,
                          new Vector2(_rand.Next(16, _graphics.PreferredBackBufferWidth - 16),
@@ -194,9 +202,9 @@ namespace AiAndGamesJam {
             IEnumerable<short> range;
             if (type.HasValue && type.Value == AntityType.Anthill)
                 range = _anthillCache.AsEnumerable();
-            else range = Enumerable.Range(0, _rightmostAntity).Cast<short>();
+            else range = Enumerable.Range(0, _rightmostAntity).Select(x => (short)x);
 
-            foreach (var i in range) {
+            foreach (short i in range) {
                 if (!_antitiesSet[i]) continue;
                 ref Antity ent = ref _antities[i];
                 if ((type.HasValue && ent.Type != type.Value) || (team.HasValue && ent.Team != team.Value)) continue;
@@ -259,8 +267,8 @@ namespace AiAndGamesJam {
         private void UpdateAnthill(int idx, ref Antity anthill, double egt) {
             switch (anthill.Action) {
                 case Actions.NewAnts:
-                    if (anthill.Value >= 20) {
-                        anthill.CoolDown = 5;
+                    if (anthill.Value >= 25) {
+                        anthill.CoolDown = 2;
                         anthill.Action = Actions.BuildingAnt;
                         anthill.Value -= 20;
                         break;
@@ -282,7 +290,7 @@ namespace AiAndGamesJam {
         }
 
         const int MAX_EXPENSIVE = 100;
-        int _expensiveThisLoop = 0;
+        int _expensiveThisLoop = 0, _expensiveDebug = 0;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateAnt(short idx, ref Antity ant, double egt) {
@@ -340,6 +348,9 @@ namespace AiAndGamesJam {
                                 ant.CoolDown = _rand.NextDouble() + 1;
                                 target.Value += ant.Value;
                                 ant.Value = 0;
+                                ant.Action = Actions.Idle;
+                                ant.Job = null;
+                                ant.TargetAntity = -1;
                                 break;
                             }
                         } else {
@@ -413,6 +424,8 @@ namespace AiAndGamesJam {
         }
 
         protected override void Update(GameTime gameTime) {
+            if (_expensiveThisLoop >= MAX_EXPENSIVE)
+                _expensiveDebug++;
             _expensiveThisLoop = 0;
 
             double totalSeconds = gameTime.TotalGameTime.TotalSeconds;
@@ -452,6 +465,8 @@ namespace AiAndGamesJam {
                         Trace.WriteLine("Clicked on Antity");
                         _selectedAntity = thing;
                         _selectedThing = -1;
+                    } else {
+                        _selectedAntity = _selectedThing = -1;
                     }
                 }
             }
@@ -527,7 +542,7 @@ namespace AiAndGamesJam {
 
             string v = Antity.AnthillActions[(int)anthill.Action];
             if (v != null) {
-                var text = v + anthill.CoolDown.ToString("0s");
+                var text = v + anthill.CoolDown.ToString("0.0s");
                 SpriteBatch.DrawString(_font, text, pos - new Vector2(_font.MeasureString(text).X / 2, -30), Color.White);
             }
         }
@@ -614,15 +629,15 @@ namespace AiAndGamesJam {
                 }
             }
 
-            Vector2 textPos = new Vector2(10, 70);
+            Vector2 textPos = new(10, 10);
             for (int i = 0; i < _jobs.Count; i++) {
                 Job job = _jobs[i];
                 textPos.Y += 20;
                 string text = job.Type switch {
-                    JobType.Gather => "Gathering Food",
+                    JobType.Gather => "Gather Food",
                     _ => $"Unknown: '{job.Type}'",
                 };
-                SpriteBatch.DrawString(_font, $"Job #{i + 1}: {text} (Priority: {job.Priority})", textPos, Color.White);
+                SpriteBatch.DrawString(_font, $"{text} ({job.Priority})", textPos, Color.White);
             }
 
             _debug.Draw(gameTime);
