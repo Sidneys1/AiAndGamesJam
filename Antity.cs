@@ -13,7 +13,6 @@ namespace AiAndGamesJam {
         None,
         Anthill,
         Ant,
-        Food,
     }
 
     enum Team : byte {
@@ -29,8 +28,8 @@ namespace AiAndGamesJam {
         public Actions Action;
         public double CoolDown;
         public double Age;
-        public Vector2 Target;
-        public int TargetAntity;
+        public bool TargetType;
+        public short Target;
         public int Value;
 
         public static string[] AnthillActions = new[] {

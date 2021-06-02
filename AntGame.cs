@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Linq;
+using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Xna.Framework;
@@ -7,10 +9,9 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 
 namespace AiAndGamesJam {
-
-
     public class AntGame : Game {
-        const int MAX_ANTITIES = 10_000;
+        const int MAX_ANTITIES = 1_000;
+        const int MAX_THINGS = 1_000;
         const int ANT_SPEED = 100;
 
         private readonly GraphicsDeviceManager _graphics;
@@ -21,14 +22,43 @@ namespace AiAndGamesJam {
         private readonly DebugComponent _debug;
         private readonly InputManager _input;
 
-        private readonly System.Collections.BitArray _antitiesSet = new(MAX_ANTITIES, false);
+        private readonly BitArray _antitiesSet = new(MAX_ANTITIES, false);
         private readonly Antity[] _antities = new Antity[MAX_ANTITIES];
         private int _rightmostAntity = 0;
-        private double _lastTrim = 0;
+        private double _lastAntitiesTrim = 0;
         private int _selectedAntity = -1;
-        private int _foodCount = 0;
 
-        void AddAntity(AntityType type = AntityType.None, Team team = Team.None, Vector2? position = null, Actions action = 0, double coolDown = 0, Vector2? target = null, int value = 0) {
+        private readonly BitArray _thingsSet = new(MAX_THINGS, false);
+        private readonly Thing[] _things = new Thing[MAX_THINGS];
+        private int _rightmostThing = 0;
+        private double _lastThingsTrim = 0;
+        private int _selectedThing = -1;
+
+        private readonly List<Job> _jobs = new();
+        private int _totalWeight = 0;
+
+        void AddJob(Job job) {
+            _jobs.Add(job);
+            _totalWeight += job.Priority;
+        }
+
+        void RemoveJob(Job job) {
+            if (_jobs.Remove(job))
+                _totalWeight -= job.Priority;
+        }
+
+        Job SelectRandomJob() {
+            int randomNumber = _rand.Next(_totalWeight);
+            for (int i = 0; i < _jobs.Count; i++) {
+                var job = _jobs[i];
+                if (randomNumber < job.Priority)
+                    return job;
+                randomNumber -= job.Priority;
+            }
+            return null;
+        }
+
+        void AddAntity(AntityType type = AntityType.None, Team team = Team.None, Vector2? position = null, Actions action = 0, double coolDown = 0, int value = 0) {
             var pos = -1;
             for (int i = 0; i < MAX_ANTITIES; i++) {
                 if (!_antitiesSet[i]) {
@@ -41,21 +71,43 @@ namespace AiAndGamesJam {
 
             if (pos > _rightmostAntity) _rightmostAntity = pos;
 
-            _antities[pos] = new Antity {
-                Type = type,
-                Team = team,
-                Position = position.GetValueOrDefault(),
-                Action = action,
-                CoolDown = coolDown,
-                Target = target.GetValueOrDefault(),
-                Value = value,
-                TargetAntity = -1
-            };
+            ref Antity ent = ref _antities[pos];
+
+            ent.Type = type;
+            ent.Team = team;
+            ent.Position = position.GetValueOrDefault();
+            ent.Action = action;
+            ent.CoolDown = coolDown;
+            ent.Value = value;
+            ent.Target = -1;
+
             _antitiesSet[pos] = true;
-            if (type == AntityType.Food) ++_foodCount;
+        }
+
+        void AddThing(ThingType type, Vector2 position, int value = 0) {
+            var pos = -1;
+            for (int i = 0; i < MAX_THINGS; i++) {
+                if (!_thingsSet[i]) {
+                    pos = i;
+                    break;
+                }
+            }
+            if (pos == -1)
+                throw new Exception("All thing slots are taken!");
+
+            if (pos > _rightmostThing) _rightmostThing = pos;
+
+            ref Thing thing = ref _things[pos];
+
+            thing.Type = type;
+            thing.Position = position;
+            thing.Value = value;
+
+            _thingsSet[pos] = true;
         }
 
         void RemoveAntity(int pos) => _antitiesSet[pos] = false;
+        void RemoveThing(int pos) => _thingsSet[pos] = false;
 
         private Texture2D _selectionPixel, _pixel, _antHill, _ant, _food;
         private Vector2 _anthillOffset = new(24, 24);
@@ -65,6 +117,11 @@ namespace AiAndGamesJam {
         private readonly Color _bgColor = new(114, 94, 0);
 
         public AntGame() {
+            unsafe {
+                Trace.WriteLine($"Antity: {sizeof(Antity)} Bytes");
+                Trace.WriteLine($"Thing: {sizeof(Thing)} Bytes");
+            }
+
             _graphics = new GraphicsDeviceManager(this);
 
             Content.RootDirectory = "Content";
@@ -77,18 +134,21 @@ namespace AiAndGamesJam {
 
             AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(400, 300), action: Actions.NewAnts, coolDown: 1.0);
             AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(200, 300), action: Actions.NewAnts, coolDown: 1.0, value: 20);
-            for (int i = 0; i < 500; i++) {
-                AddAntity(AntityType.Food, position: new Vector2(_rand.Next(16, _graphics.PreferredBackBufferWidth - 16), _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)), value: 100);
+            for (int i = 0; i < 5; i++) {
+                AddThing(ThingType.Food,
+                         new Vector2(_rand.Next(16, _graphics.PreferredBackBufferWidth - 16),
+                                     _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
+                         value: 100);
             }
-            Trace.WriteLine("Creating ants...");
-            for (int i = 0; i < 9_400; i++) {
-                AddAntity(
-                    AntityType.Ant,
-                    Team.Player,
-                    position: new Vector2(_rand.Next(16, _graphics.PreferredBackBufferWidth - 16), _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
-                    action: Actions.Gather,
-                    coolDown: (_rand.NextDouble() * 2) + 3);
-            }
+            // Trace.WriteLine("Creating ants...");
+            // for (int i = 0; i < 50; i++) {
+            //     AddAntity(
+            //         AntityType.Ant,
+            //         Team.Player,
+            //         position: new Vector2(_rand.Next(16, _graphics.PreferredBackBufferWidth - 16), _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
+            //         action: Actions.Idle,
+            //         coolDown: (_rand.NextDouble() * 2) + 3);
+            // }
         }
 
         protected override void LoadContent() {
@@ -107,29 +167,61 @@ namespace AiAndGamesJam {
             _pixel = _debug._pixel;
         }
 
-        // [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        // private int AskNearby(AntityType type, Team? team = null) {
-        //     for (int i = 0; i < _rightmostAntity; i++) {
-        //         if (!_antitiesSet[i]) continue;
-        //         ref Antity ent = ref _antities[i];
-        //         if (ent.TargetAntity == -1 || !_antitiesSet[ent.TargetAntity] || (team.HasValue && ent.Team != team.Value)) continue;
-        //         ref Antity target = ref _antities[ent.TargetAntity];
-        //         if (target.Type != type) continue;
-        //         return ent.TargetAntity;
-        //     }
-        //     return -1;
-        // }
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int FindNearest(ref Vector2 position, AntityType type, Team? team = null) {
-            if (type == AntityType.Food && _foodCount == 0) return -1;
-            int ret = -1;
+        private short FindNearestAntity(ref Vector2 position, AntityType? type = null, Team? team = null, bool collision = false) {
+            short ret = -1;
             float nearest = float.MaxValue;
-            for (int i = 0; i < _rightmostAntity; i++) {
+            for (short i = 0; i < _rightmostAntity; i++) {
                 if (!_antitiesSet[i]) continue;
                 ref Antity ent = ref _antities[i];
-                if (ent.Type != type || (team.HasValue && ent.Team != team.Value)) continue;
-                var distance = (ent.Position - position).Length();
+                if ((type.HasValue && ent.Type != type.Value) || (team.HasValue && ent.Team != team.Value)) continue;
+                // Manhattan distance
+                var distance = Math.Abs(ent.Position.X - position.X) + Math.Abs(ent.Position.Y - position.Y);
+
+                if (collision) {
+                    switch (ent.Type) {
+                        case AntityType.Anthill:
+                            if (distance > 48) continue;
+                            break;
+                        case AntityType.Ant:
+                            if (distance > 10) continue;
+                            break;
+                        default:
+                            Trace.WriteLine("MISSING COLLISION HANDLER IN FindNearestThing!");
+                            break;
+                    }
+                }
+
+                if (distance < nearest) {
+                    ret = i;
+                    nearest = distance;
+                }
+            }
+            return ret;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private short FindNearestThing(ref Vector2 position, ThingType? type = null, bool collision = false) {
+            short ret = -1;
+            float nearest = float.MaxValue;
+            for (short i = 0; i < _rightmostThing; i++) {
+                if (!_thingsSet[i]) continue;
+                ref Thing ent = ref _things[i];
+                if (type.HasValue && ent.Type != type.Value) continue;
+                // Manhattan distance
+                var distance = Math.Abs(ent.Position.X - position.X) + Math.Abs(ent.Position.Y - position.Y);
+
+                if (collision) {
+                    switch (ent.Type) {
+                        case ThingType.Food:
+                            if (distance > 32) continue;
+                            break;
+                        default:
+                            Trace.WriteLine("MISSING COLLISION HANDLER IN FindNearestThing!");
+                            break;
+                    }
+                }
+
                 if (distance < nearest) {
                     ret = i;
                     nearest = distance;
@@ -166,7 +258,7 @@ namespace AiAndGamesJam {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateAnt(int idx, ref Antity ant, double egt) {
-            if (ant.Age >= 10 && _rand.NextDouble() >= 0.99) {
+            if (ant.Age >= 120 && _rand.NextDouble() >= 0.99) {
                 RemoveAntity(idx);
                 return;
             }
@@ -182,61 +274,6 @@ namespace AiAndGamesJam {
                     break;
 
                 case Actions.Gather:
-                    if (ant.TargetAntity != -1) {
-                        // Move
-                        if (!_antitiesSet[ant.TargetAntity]) {
-                            ant.TargetAntity = -1;//FindNearest(ref ant.Position, AntityType.Anthill, ant.Team);
-                            ant.CoolDown = _rand.NextDouble();
-                            break;
-                        }
-                        ref Antity target = ref _antities[ant.TargetAntity];
-                        var targetPos = target.Position;
-                        Vector2 diff = targetPos - ant.Position;
-                        float distance = diff.Length();
-                        speed = (float)(egt * ANT_SPEED);
-                        if ((distance - 5) < speed) {
-                            // We're here!
-                            ant.CoolDown = _rand.NextDouble() + 1;
-                            if (ant.Value != 0) {
-                                target.Value += ant.Value;
-                                ant.Value = 0;
-                            } else if (target.Type == AntityType.Food) {
-                                target.Value -= ant.Value = 1;//Math.Min(1, target.Value);
-                                if (target.Value == 0) {
-                                    RemoveAntity(ant.TargetAntity);
-                                    --_foodCount;
-                                }
-                            }
-                            ant.TargetAntity = -1;
-                            break;
-                        }
-                        // Wiggle
-                        diff.Normalize();
-                        // var randomRot = (float)(_rand.NextDouble() - 0.5) * 2;
-                        // diff = Vector2.Transform(diff, Matrix.CreateRotationX((float)(randomRot * Math.PI)));
-                        diff += new Vector2((float)(_rand.NextDouble() - 0.5), (float)(_rand.NextDouble() - 0.5));
-                        diff.Normalize();
-                        ant.Position += diff * speed;
-
-                    } else if (ant.Value != 0) {
-                        // Target anthill
-                        var nearestAnthill = FindNearest(ref ant.Position, AntityType.Anthill, ant.Team);
-                        if (nearestAnthill == -1) {
-                            // Trace.WriteLine("COULD NOT FIND A NEARBY ANTHILL!");
-                            ant.CoolDown = 0.5 + _rand.NextDouble();
-                            ant.Action = Actions.Idle;
-                        }
-                        ant.TargetAntity = nearestAnthill;
-                    } else {
-                        // Target food
-                        var nearestFood = FindNearest(ref ant.Position, AntityType.Food);
-                        if (nearestFood == -1) {
-                            // Trace.WriteLine("COULD NOT FIND A NEARBY FOOD!");
-                            ant.CoolDown = 0.5 + _rand.NextDouble();
-                            ant.Action = Actions.Idle;
-                        }
-                        ant.TargetAntity = nearestFood;
-                    }
                     break;
 
                 default:
@@ -257,7 +294,6 @@ namespace AiAndGamesJam {
                 if (actualSelection == _selectedAntity || ent.Team != Team.Player || ent.Type == AntityType.None) continue;
 
                 if (type.HasValue && ent.Type != type.Value) continue;
-                else if (ent.Type == AntityType.Food) continue;
 
                 if (action.HasValue && ent.Action != action.Value) continue;
 
@@ -269,18 +305,47 @@ namespace AiAndGamesJam {
         }
 
         protected override void Update(GameTime gameTime) {
-            if (gameTime.TotalGameTime.TotalSeconds - _lastTrim >= 1.0) {
+            double totalSeconds = gameTime.TotalGameTime.TotalSeconds;
+            if (totalSeconds - _lastAntitiesTrim >= 1.0) {
                 var newRightmost = _rightmostAntity;
                 for (int i = _rightmostAntity - 1; i >= 0; i--) {
                     if (_antitiesSet[i]) break;
                     newRightmost = i;
                 }
                 _rightmostAntity = newRightmost;
-                _lastTrim = gameTime.TotalGameTime.TotalSeconds;
+                _lastAntitiesTrim = totalSeconds;
+            }
+
+            if (totalSeconds - _lastThingsTrim >= 1.0) {
+                var newRightmost = _rightmostThing;
+                for (int i = _rightmostThing - 1; i >= 0; i--) {
+                    if (_thingsSet[i]) break;
+                    newRightmost = i;
+                }
+                _rightmostThing = newRightmost;
+                _lastThingsTrim = totalSeconds;
             }
 
             _input.Update(gameTime);
             _debug.Update(gameTime);
+
+            if (InputManager.LeftMouseWentDown()) {
+                var mpos = InputManager.CurrentMouseState.Position.ToVector2();
+                Trace.WriteLine($"LMouse! {mpos}");
+                short thing = FindNearestThing(ref mpos);
+                if (thing != -1) {
+                    Trace.WriteLine("Clicked on thing");
+                    _selectedThing = thing;
+                    _selectedAntity = -1;
+                } else {
+                    thing = FindNearestAntity(ref mpos, team: Team.Player);
+                    if (thing != -1) {
+                        Trace.WriteLine("Clicked on Antity");
+                        _selectedAntity = thing;
+                        _selectedThing = -1;
+                    }
+                }
+            }
 
             if (InputManager.KeyWentDown(Keys.Escape))
                 Exit();
@@ -353,7 +418,12 @@ namespace AiAndGamesJam {
                 DrawSelection(selection);
             }
             pos = ant.Position;
-            SpriteBatch.Draw(_ant, pos - _antOffset, Color.Black);
+            var color = Color.Black;
+            if (ant.Age >= 80)
+                color = Color.Gray;
+            else if (ant.Age >= 40)
+                color = Color.DarkGray;
+            SpriteBatch.Draw(_ant, pos - _antOffset, color);
 
             if (ant.Action == Actions.Gather && ant.Value > 0)
                 SpriteBatch.Draw(_pixel, new Rectangle((int)pos.X, (int)pos.Y, 2, 2), Color.Green);
@@ -361,7 +431,7 @@ namespace AiAndGamesJam {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void DrawFood(ref Antity food) {
+        private void DrawFood(ref Thing food) {
             Color color;
             if (food.Value >= 66)
                 color = Color.White;
@@ -385,18 +455,29 @@ namespace AiAndGamesJam {
 
             SpriteBatch.Begin();
 
+            for (int i = 0; i < _rightmostThing; i++) {
+                if (!_thingsSet[i]) continue;
+
+                ref Thing thing = ref _things[i];
+
+                switch (thing.Type) {
+                    case ThingType.Food:
+                        DrawFood(ref thing);
+                        break;
+                }
+            }
+
             for (int i = 0; i < _rightmostAntity; i++) {
                 if (!_antitiesSet[i]) continue;
 
-                switch (_antities[i].Type) {
+                ref Antity ent = ref _antities[i];
+
+                switch (ent.Type) {
                     case AntityType.Anthill:
-                        DrawAnthill(ref _antities[i], i == _selectedAntity);
+                        DrawAnthill(ref ent, i == _selectedAntity);
                         break;
                     case AntityType.Ant:
-                        DrawAnt(ref _antities[i], i == _selectedAntity);
-                        break;
-                    case AntityType.Food:
-                        DrawFood(ref _antities[i]);
+                        DrawAnt(ref ent, i == _selectedAntity);
                         break;
                     default: continue;
                 }

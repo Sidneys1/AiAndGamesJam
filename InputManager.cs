@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
@@ -58,5 +59,8 @@ namespace AiAndGamesJam {
             }
             isKeyboardSwapped = !isKeyboardSwapped;
         }
+
+        internal static bool LeftMouseWentDown() =>
+            LastMouseState.LeftButton == ButtonState.Released && CurrentMouseState.LeftButton == ButtonState.Pressed;
     }
 }
