@@ -6,7 +6,7 @@ namespace AiAndGamesJam {
         BuildingAnt,
         NewAnts,
         Idle,
-        Gather,
+        Job,
     }
 
     enum AntityType : byte {
@@ -28,8 +28,8 @@ namespace AiAndGamesJam {
         public Actions Action;
         public double CoolDown;
         public double Age;
-        public bool TargetType;
-        public short Target;
+        public Job Job;
+        public short TargetAntity;
         public int Value;
 
         public static string[] AnthillActions = new[] {

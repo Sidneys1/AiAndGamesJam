@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
@@ -14,6 +14,9 @@ namespace AiAndGamesJam {
         const int MAX_THINGS = 1_000;
         const int ANT_SPEED = 100;
 
+        private Color ANT_MIDDLE_AGE = new(10, 10, 10);
+        private Color ANT_OLD_AGE = new(20, 20, 20);
+
         private readonly GraphicsDeviceManager _graphics;
         public SpriteBatch SpriteBatch;
 
@@ -24,6 +27,7 @@ namespace AiAndGamesJam {
 
         private readonly BitArray _antitiesSet = new(MAX_ANTITIES, false);
         private readonly Antity[] _antities = new Antity[MAX_ANTITIES];
+        private readonly List<short> _anthillCache = new();
         private int _rightmostAntity = 0;
         private double _lastAntitiesTrim = 0;
         private int _selectedAntity = -1;
@@ -32,7 +36,7 @@ namespace AiAndGamesJam {
         private readonly Thing[] _things = new Thing[MAX_THINGS];
         private int _rightmostThing = 0;
         private double _lastThingsTrim = 0;
-        private int _selectedThing = -1;
+        private short _selectedThing = -1;
 
         private readonly List<Job> _jobs = new();
         private int _totalWeight = 0;
@@ -59,8 +63,8 @@ namespace AiAndGamesJam {
         }
 
         void AddAntity(AntityType type = AntityType.None, Team team = Team.None, Vector2? position = null, Actions action = 0, double coolDown = 0, int value = 0) {
-            var pos = -1;
-            for (int i = 0; i < MAX_ANTITIES; i++) {
+            short pos = -1;
+            for (short i = 0; i < MAX_ANTITIES; i++) {
                 if (!_antitiesSet[i]) {
                     pos = i;
                     break;
@@ -69,7 +73,7 @@ namespace AiAndGamesJam {
             if (pos == -1)
                 throw new Exception("All entity slots are taken!");
 
-            if (pos > _rightmostAntity) _rightmostAntity = pos;
+            if (pos >= _rightmostAntity) _rightmostAntity = pos + 1;
 
             ref Antity ent = ref _antities[pos];
 
@@ -79,9 +83,10 @@ namespace AiAndGamesJam {
             ent.Action = action;
             ent.CoolDown = coolDown;
             ent.Value = value;
-            ent.Target = -1;
+            ent.Job = null;
 
             _antitiesSet[pos] = true;
+            if (type == AntityType.Anthill) _anthillCache.Add(pos);
         }
 
         void AddThing(ThingType type, Vector2 position, int value = 0) {
@@ -95,7 +100,7 @@ namespace AiAndGamesJam {
             if (pos == -1)
                 throw new Exception("All thing slots are taken!");
 
-            if (pos > _rightmostThing) _rightmostThing = pos;
+            if (pos >= _rightmostThing) _rightmostThing = pos + 1;
 
             ref Thing thing = ref _things[pos];
 
@@ -106,7 +111,12 @@ namespace AiAndGamesJam {
             _thingsSet[pos] = true;
         }
 
-        void RemoveAntity(int pos) => _antitiesSet[pos] = false;
+        void RemoveAntity(short pos) {
+            if (_antities[pos].Type == AntityType.Anthill)
+                _anthillCache.Remove(pos);
+            _antitiesSet[pos] = false;
+        }
+
         void RemoveThing(int pos) => _thingsSet[pos] = false;
 
         private Texture2D _selectionPixel, _pixel, _antHill, _ant, _food, _bg;
@@ -117,12 +127,11 @@ namespace AiAndGamesJam {
         private readonly Color _bgColor = new(114, 94, 0);
 
         public AntGame() {
-            unsafe {
-                Trace.WriteLine($"Antity: {sizeof(Antity)} Bytes");
-                Trace.WriteLine($"Thing: {sizeof(Thing)} Bytes");
-            }
-
-            _graphics = new GraphicsDeviceManager(this);
+            _graphics = new GraphicsDeviceManager(this) {
+                // PreferredBackBufferWidth = 1280,
+                // PreferredBackBufferHeight = 720,
+                GraphicsProfile = GraphicsProfile.HiDef,
+            };
 
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
@@ -130,24 +139,34 @@ namespace AiAndGamesJam {
             _input = new InputManager(this);
 
             _debug = new DebugComponent(this);
-            _debug.AddDebugLine(() => $"Slots: {_antitiesSet.GetCardinality()} used/{_rightmostAntity + 1} allocated/{MAX_ANTITIES} max");
+            _debug.AddDebugLine(() => $"Entity Slots: {_antitiesSet.GetCardinality()} used/{_rightmostAntity + 1} allocated/{MAX_ANTITIES} max");
+            _debug.AddDebugLine(() => $"Thing Slots: {_thingsSet.GetCardinality()} used/{_rightmostThing + 1} allocated/{MAX_THINGS} max");
 
-            AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(400, 300), action: Actions.NewAnts, coolDown: 1.0);
-            AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(200, 300), action: Actions.NewAnts, coolDown: 1.0, value: 20);
+            AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(400, 300), action: Actions.NewAnts, coolDown: 1.0, value: 100);
+            AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(200, 300), action: Actions.NewAnts, coolDown: 1.0);
             for (int i = 0; i < 5; i++) {
                 AddThing(ThingType.Food,
                          new Vector2(_rand.Next(16, _graphics.PreferredBackBufferWidth - 16),
                                      _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
                          value: 100);
             }
+
+            for (short i = 0; i < 5; i++) {
+                AddJob(new Job() {
+                    Priority = 1,
+                    Target = i,
+                    Type = JobType.Gather
+                });
+            }
             // Trace.WriteLine("Creating ants...");
-            // for (int i = 0; i < 50; i++) {
+            // for (int i = 0; i < 500; i++) {
             //     AddAntity(
             //         AntityType.Ant,
             //         Team.Player,
             //         position: new Vector2(_rand.Next(16, _graphics.PreferredBackBufferWidth - 16), _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
-            //         action: Actions.Idle,
+            //         action: Actions.Job, // Actions.Job,
             //         coolDown: (_rand.NextDouble() * 2) + 3);
+            //     _antities[i + 1].Job = _jobs[i % 50];
             // }
         }
 
@@ -172,7 +191,12 @@ namespace AiAndGamesJam {
         private short FindNearestAntity(ref Vector2 position, AntityType? type = null, Team? team = null, bool collision = false) {
             short ret = -1;
             float nearest = float.MaxValue;
-            for (short i = 0; i < _rightmostAntity; i++) {
+            IEnumerable<short> range;
+            if (type.HasValue && type.Value == AntityType.Anthill)
+                range = _anthillCache.AsEnumerable();
+            else range = Enumerable.Range(0, _rightmostAntity).Cast<short>();
+
+            foreach (var i in range) {
                 if (!_antitiesSet[i]) continue;
                 ref Antity ent = ref _antities[i];
                 if ((type.HasValue && ent.Type != type.Value) || (team.HasValue && ent.Team != team.Value)) continue;
@@ -257,24 +281,107 @@ namespace AiAndGamesJam {
             }
         }
 
+        const int MAX_EXPENSIVE = 100;
+        int _expensiveThisLoop = 0;
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void UpdateAnt(int idx, ref Antity ant, double egt) {
+        private void UpdateAnt(short idx, ref Antity ant, double egt) {
             if (ant.Age >= 120 && _rand.NextDouble() >= 0.99) {
                 RemoveAntity(idx);
                 return;
             }
 
             switch (ant.Action) {
-                case Actions.Idle:
-                    ant.CoolDown = 0.05;
-                    var rotation = (float)_rand.NextDouble() * MathHelper.TwoPi;
-                    var move = new Vector2((float)Math.Cos(rotation), (float)Math.Sin(rotation));
-                    move.Normalize();
-                    var speed = (float)(ANT_SPEED * egt);
-                    ant.Position += move * speed;
+                case Actions.Idle: {
+                        ant.CoolDown = 0.05;
+                        if (_rand.NextDouble() >= 0.9 && _expensiveThisLoop < MAX_EXPENSIVE) {
+                            ant.Job = SelectRandomJob();
+                            if (ant.Job != null)
+                                ant.Action = Actions.Job;
+                            _expensiveThisLoop++;
+                            break;
+                        }
+                        var rotation = (float)_rand.NextDouble() * MathHelper.TwoPi;
+                        var move = new Vector2((float)Math.Cos(rotation), (float)Math.Sin(rotation));
+                        move.Normalize();
+                        var speed = (float)(ANT_SPEED * egt);
+                        ant.Position += move * speed;
+                    }
                     break;
 
-                case Actions.Gather:
+                case Actions.Job: {
+                        // Trace.WriteLine("Ant is on the job");
+                        Vector2 targetPos, diff;
+                        var speed = (float)(egt * ANT_SPEED);
+                        if (ant.Value > 0) {
+                            // Going to anthill...
+                            if (ant.TargetAntity == -1) {
+                                // Pick a target
+                                ant.CoolDown = _rand.NextDouble();
+                                if (_expensiveThisLoop >= MAX_EXPENSIVE)
+                                    break;
+                                ant.TargetAntity = FindNearestAntity(ref ant.Position, AntityType.Anthill, ant.Team);
+                                _expensiveThisLoop++;
+                                break;
+                            }
+                            if (!_antitiesSet[ant.TargetAntity]) {
+                                // Our anthill got deleted??
+                                ant.TargetAntity = -1;
+                                ant.CoolDown = _rand.NextDouble();
+                                break;
+                            }
+                            ref Antity target = ref _antities[ant.TargetAntity];
+                            targetPos = target.Position;
+                            diff = targetPos - ant.Position;
+                            float distance = diff.Length();
+
+                            if ((distance - 5) < speed) {
+                                // We're here!
+                                ant.CoolDown = _rand.NextDouble() + 1;
+                                target.Value += ant.Value;
+                                ant.Value = 0;
+                                break;
+                            }
+                        } else {
+                            // Going to food
+                            if (!_thingsSet[ant.Job.Target]) {
+                                // Our food got deleted
+                                RemoveJob(ant.Job);
+                                ant.Action = Actions.Idle;
+                                ant.Job = null;
+                                ant.TargetAntity = -1;
+                                ant.CoolDown = _rand.NextDouble();
+                                break;
+                            }
+                            ref Thing target = ref _things[ant.Job.Target];
+                            targetPos = target.Position;
+                            diff = targetPos - ant.Position;
+                            float distance = diff.Length();
+                            if ((distance - 5) < speed) {
+                                // We're here!
+                                ant.CoolDown = _rand.NextDouble() + 1;
+                                target.Value -= ant.Value = 1;//Math.Min(1, target.Value);
+                                if (target.Value == 0) {
+                                    // Delete food
+                                    RemoveThing(ant.Job.Target);
+                                    // Delete job
+                                    RemoveJob(ant.Job);
+                                    ant.Action = Actions.Idle;
+                                    ant.Job = null;
+                                    ant.TargetAntity = -1;
+                                    ant.CoolDown = _rand.NextDouble();
+                                }
+                                break;
+                            }
+                        }
+                        // Wiggle
+                        diff.Normalize();
+                        // var randomRot = (float)(_rand.NextDouble() - 0.5) * 2;
+                        // diff = Vector2.Transform(diff, Matrix.CreateRotationX((float)(randomRot * Math.PI)));
+                        diff += new Vector2((float)(_rand.NextDouble() - 0.5), (float)(_rand.NextDouble() - 0.5));
+                        diff.Normalize();
+                        ant.Position += diff * speed;
+                    }
                     break;
 
                 default:
@@ -287,7 +394,7 @@ namespace AiAndGamesJam {
         private void SelectNextEntity(AntityType? type = null, Actions? action = null) {
             Trace.WriteLine("Selecting next entity...");
             int next = -1;
-            for (int i = 0; i < MAX_ANTITIES + 1; i++) {
+            for (int i = 0; i < MAX_ANTITIES; i++) {
                 // LOOP
                 int actualSelection = _selectedAntity != -1 ? (i + _selectedAntity) % MAX_ANTITIES : i;
                 ref Antity ent = ref _antities[actualSelection];
@@ -306,6 +413,8 @@ namespace AiAndGamesJam {
         }
 
         protected override void Update(GameTime gameTime) {
+            _expensiveThisLoop = 0;
+
             double totalSeconds = gameTime.TotalGameTime.TotalSeconds;
             if (totalSeconds - _lastAntitiesTrim >= 1.0) {
                 var newRightmost = _rightmostAntity;
@@ -313,7 +422,7 @@ namespace AiAndGamesJam {
                     if (_antitiesSet[i]) break;
                     newRightmost = i;
                 }
-                _rightmostAntity = newRightmost;
+                _rightmostAntity = newRightmost + 1;
                 _lastAntitiesTrim = totalSeconds;
             }
 
@@ -323,7 +432,7 @@ namespace AiAndGamesJam {
                     if (_thingsSet[i]) break;
                     newRightmost = i;
                 }
-                _rightmostThing = newRightmost;
+                _rightmostThing = newRightmost + 1;
                 _lastThingsTrim = totalSeconds;
             }
 
@@ -332,14 +441,13 @@ namespace AiAndGamesJam {
 
             if (InputManager.LeftMouseWentDown()) {
                 var mpos = InputManager.CurrentMouseState.Position.ToVector2();
-                Trace.WriteLine($"LMouse! {mpos}");
-                short thing = FindNearestThing(ref mpos);
+                short thing = FindNearestThing(ref mpos, collision: true);
                 if (thing != -1) {
                     Trace.WriteLine("Clicked on thing");
                     _selectedThing = thing;
                     _selectedAntity = -1;
                 } else {
-                    thing = FindNearestAntity(ref mpos, team: Team.Player);
+                    thing = FindNearestAntity(ref mpos, team: Team.Player, collision: true);
                     if (thing != -1) {
                         Trace.WriteLine("Clicked on Antity");
                         _selectedAntity = thing;
@@ -347,6 +455,9 @@ namespace AiAndGamesJam {
                     }
                 }
             }
+
+            if (InputManager.RightMouseWentDown())
+                AddThing(ThingType.Food, InputManager.CurrentMouseState.Position.ToVector2(), value: 100);
 
             if (InputManager.KeyWentDown(Keys.Escape))
                 Exit();
@@ -366,7 +477,16 @@ namespace AiAndGamesJam {
             if (InputManager.KeyWentDown(Keys.I))
                 SelectNextEntity(AntityType.Ant, Actions.Idle);
 
-            for (int i = 0; i < _rightmostAntity; i++) {
+            if (_selectedThing != -1 && InputManager.KeyWentDown(Keys.G)) {
+                AddJob(new Job {
+                    Priority = 1,
+                    Target = _selectedThing,
+                    Type = JobType.Gather
+                });
+                SelectNextEntity(AntityType.Ant, Actions.Idle);
+            }
+
+            for (short i = 0; i < _rightmostAntity; i++) {
                 if (!_antitiesSet[i]) continue;
 
                 var egt = gameTime.ElapsedGameTime.TotalSeconds;
@@ -386,6 +506,8 @@ namespace AiAndGamesJam {
                         break;
                 }
             }
+
+
 
             base.Update(gameTime);
         }
@@ -419,20 +541,26 @@ namespace AiAndGamesJam {
                 DrawSelection(selection);
             }
             pos = ant.Position;
-            var color = Color.Black;
-            if (ant.Age >= 80)
-                color = Color.Gray;
-            else if (ant.Age >= 40)
-                color = Color.DarkGray;
+            var color = ant.Age switch {
+                >= 80 => ANT_OLD_AGE,
+                >= 40 => ANT_MIDDLE_AGE,
+                _ => Color.Black,
+            };
             SpriteBatch.Draw(_ant, pos - _antOffset, color);
 
-            if (ant.Action == Actions.Gather && ant.Value > 0)
+            if (ant.Action == Actions.Job && ant.Job?.Type == JobType.Gather && ant.Value > 0)
                 SpriteBatch.Draw(_pixel, new Rectangle((int)pos.X, (int)pos.Y, 2, 2), Color.Green);
 
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void DrawFood(ref Thing food) {
+        private void DrawFood(ref Thing food, bool selected) {
+            var pos = food.Position;
+            if (selected) {
+                Vector2 padding = new(3);
+                Rectangle selection = new((pos - _anthillOffset - padding).ToPoint(), ((_anthillOffset * 2) + (padding * 2)).ToPoint());
+                DrawSelection(selection);
+            }
             Color color;
             if (food.Value >= 66)
                 color = Color.White;
@@ -440,8 +568,8 @@ namespace AiAndGamesJam {
                 color = Color.SandyBrown;
             else
                 color = Color.Brown;
-            SpriteBatch.Draw(_food, food.Position - _foodOffset, color);
-            Rectangle rect = new((int)(food.Position.X - _foodOffset.X), (int)(food.Position.Y + _foodOffset.Y) + 3, (int)(32 * (food.Value / 100f)), 3);
+            SpriteBatch.Draw(_food, pos - _foodOffset, color);
+            Rectangle rect = new((int)(pos.X - _foodOffset.X), (int)(pos.Y + _foodOffset.Y) + 3, (int)(32 * (food.Value / 100f)), 3);
             if (food.Value >= 66)
                 color = Color.Green;
             else if (food.Value >= 50)
@@ -465,7 +593,7 @@ namespace AiAndGamesJam {
 
                 switch (thing.Type) {
                     case ThingType.Food:
-                        DrawFood(ref thing);
+                        DrawFood(ref thing, i == _selectedThing);
                         break;
                 }
             }
@@ -484,6 +612,17 @@ namespace AiAndGamesJam {
                         break;
                     default: continue;
                 }
+            }
+
+            Vector2 textPos = new Vector2(10, 70);
+            for (int i = 0; i < _jobs.Count; i++) {
+                Job job = _jobs[i];
+                textPos.Y += 20;
+                string text = job.Type switch {
+                    JobType.Gather => "Gathering Food",
+                    _ => $"Unknown: '{job.Type}'",
+                };
+                SpriteBatch.DrawString(_font, $"Job #{i + 1}: {text} (Priority: {job.Priority})", textPos, Color.White);
             }
 
             _debug.Draw(gameTime);
