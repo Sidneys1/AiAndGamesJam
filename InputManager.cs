@@ -62,5 +62,8 @@ namespace AiAndGamesJam {
 
         internal static bool LeftMouseWentDown() =>
             LastMouseState.LeftButton == ButtonState.Released && CurrentMouseState.LeftButton == ButtonState.Pressed;
+
+        internal static bool RightMouseWentDown() =>
+            LastMouseState.RightButton == ButtonState.Released && CurrentMouseState.RightButton == ButtonState.Pressed;
     }
 }
