@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
@@ -109,7 +109,7 @@ namespace AiAndGamesJam {
         void RemoveAntity(int pos) => _antitiesSet[pos] = false;
         void RemoveThing(int pos) => _thingsSet[pos] = false;
 
-        private Texture2D _selectionPixel, _pixel, _antHill, _ant, _food;
+        private Texture2D _selectionPixel, _pixel, _antHill, _ant, _food, _bg;
         private Vector2 _anthillOffset = new(24, 24);
         private Vector2 _antOffset = new(3, 2);
         private Vector2 _foodOffset = new(16, 16);
@@ -159,6 +159,7 @@ namespace AiAndGamesJam {
             _antHill = ContentManager.GetTexture("anthill");
             _ant = ContentManager.GetTexture("ant");
             _food = ContentManager.GetTexture("food");
+            _bg = ContentManager.GetTexture("bg");
             _font = ContentManager.GetFont("perfect_dos");
 
             _debug.Initialize();
@@ -454,6 +455,8 @@ namespace AiAndGamesJam {
             GraphicsDevice.Clear(_bgColor);
 
             SpriteBatch.Begin();
+
+            SpriteBatch.Draw(_bg, Vector2.Zero, Color.White);
 
             for (int i = 0; i < _rightmostThing; i++) {
                 if (!_thingsSet[i]) continue;

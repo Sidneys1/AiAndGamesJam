@@ -9,6 +9,7 @@ namespace AiAndGamesJam {
             { "anthill", null },
             { "ant", null },
             { "food", null },
+            { "bg", null },
         };
 
         static readonly Dictionary<string, SpriteFont> _fonts = new() {
