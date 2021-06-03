@@ -7,12 +7,15 @@ namespace AiAndGamesJam {
     public partial class AntGame {
         private readonly System.Collections.BitArray _antitiesSet = new(MAX_ANTITIES, false);
         private readonly Antity[] _antities = new Antity[MAX_ANTITIES];
-        private readonly List<short> _anthillCache = new();
+        private readonly Dictionary<Team, List<short>> _anthillCache = new() {
+            { Team.Player, new() },
+            { Team.Fireants, new() },
+        };
         private int _rightmostAntity = 0;
         private double _lastAntitiesTrim = 0;
         private int _selectedAntity = -1;
 
-        void AddAntity(AntityType type = AntityType.None, Team team = Team.None, Vector2? position = null, Actions action = 0, double coolDown = 0, int value = 0) {
+        short AddAntity(AntityType type = AntityType.None, Team team = Team.None, Vector2? position = null, Actions action = 0, double coolDown = 0, int value = 0) {
             short pos = -1;
             for (short i = 0; i < MAX_ANTITIES; i++) {
                 if (!_antitiesSet[i]) {
@@ -36,13 +39,15 @@ namespace AiAndGamesJam {
             ent.Job = null;
 
             _antitiesSet[pos] = true;
-            if (type == AntityType.Anthill) _anthillCache.Add(pos);
+            if (type == AntityType.Anthill) _anthillCache[team].Add(pos);
+            return pos;
         }
 
         void RemoveAntity(short pos) {
             if (_antities[pos].Type == AntityType.Anthill)
-                _anthillCache.Remove(pos);
+                _anthillCache[_antities[pos].Team].Remove(pos);
             _antitiesSet[pos] = false;
+            _antities[pos].Job = null;
             if (_selectedAntity == pos)
                 _selectedAntity = -1;
         }
@@ -53,7 +58,7 @@ namespace AiAndGamesJam {
             float nearest = float.MaxValue;
             IEnumerable<short> range;
             if (type.HasValue && type.Value == AntityType.Anthill)
-                range = _anthillCache.AsEnumerable();
+                range = team.HasValue ? _anthillCache[team.Value].AsEnumerable() : _anthillCache.SelectMany(x => x.Value);
             else range = Enumerable.Range(0, _rightmostAntity).Select(x => (short)x);
 
             foreach (short i in range) {

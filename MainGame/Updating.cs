@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace AiAndGamesJam {
@@ -7,44 +8,67 @@ namespace AiAndGamesJam {
         const int MAX_EXPENSIVE = 100;
         int _expensiveThisLoop = 0, _expensiveDebug = 0;
 
-        double _introTime = 7.0;
+        double _lastStateTime = 7.0;
+
+        const string SECRET = "aiandgames";
+        private bool _secretUpdated = false;
+        private CircularBuffer<char> _secret = new(SECRET.Length, new char[SECRET.Length]);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateLogoState(GameTime gameTime) {
             double gts = gameTime.TotalGameTime.TotalSeconds;
             if (gts >= 7.0) {
                 _state = GameState.Intro;
-            } else if (InputManager.KeyWentDown(Keys.Escape)) {
+            } else if (InputManager.KeyWentDown(Keys.Enter)) {
                 _state = GameState.Intro;
-                _introTime = gts;
+                _lastStateTime = gts;
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateIntroState(GameTime gameTime) {
-            if (gameTime.TotalGameTime.TotalSeconds >= (_introTime + 10.0) || InputManager.KeyWentDown(Keys.Escape)) {
-                _state = GameState.Game;
+            if (gameTime.TotalGameTime.TotalSeconds >= (_lastStateTime + 10.0) || InputManager.KeyWentDown(Keys.Enter)) {
+                _state = GameState.GenerateScenario;
                 Window.AllowUserResizing = true;
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateGameState(GameTime gameTime) {
+            if (_secretUpdated) {
+                string v = new(_secret.ToArray());
+                if (v == SECRET) {
+                    System.Diagnostics.Trace.WriteLine("SECRET!");
+                    AddAntity(AntityType.Tommy, position: new Vector2((float)(200 + (_rand.NextDouble() * (GraphicsDevice.Viewport.Width - 200 - _tommy.Width))), GraphicsDevice.Viewport.Height));
+                }
+                _secretUpdated = false;
+            }
+
             if (_expensiveThisLoop >= MAX_EXPENSIVE)
                 _expensiveDebug++;
             _expensiveThisLoop = 0;
+
+            if (IsGoalSatisfied()) {
+                _state = GameState.Won;
+                return;
+            }
+
+            if (IsAllLost()) {
+                _state = GameState.Lost;
+                return;
+            }
 
             UpdateTrims(gameTime);
 
             if (InputManager.LeftMouseWentDown()) {
                 var mouse_position = InputManager.CurrentMouseState.Position.ToVector2();
                 if (mouse_position.X < _leftPanelRect.Width) {
-                    int newSelection = (int)(mouse_position.Y - 130) / 20;
-                    if (newSelection < 0 || newSelection >= _jobs.Count)
+                    int newSelection = (int)(mouse_position.Y - 185) / 20;
+                    if (newSelection < 0 || newSelection >= _jobs[Team.Player].Count)
                         _selectedJob = -1;
                     else {
                         _selectedJob = newSelection;
-                        _selectedThing = _jobs[_selectedJob].Target;
+                        _selectedThing = _jobs[Team.Player][_selectedJob].Target;
                         _selectedAntity = -1;
                     }
                 } else {
@@ -66,9 +90,6 @@ namespace AiAndGamesJam {
 
             if (InputManager.RightMouseWentDown())
                 AddThing(ThingType.Food, InputManager.CurrentMouseState.Position.ToVector2(), value: 100);
-
-            if (InputManager.KeyWentDown(Keys.Escape))
-                Exit();
 
             if (InputManager.KeyWentDown(Keys.F1))
                 _debug.Enabled = !_debug.Enabled;
@@ -101,10 +122,14 @@ namespace AiAndGamesJam {
                 SelectNextThing(ThingType.Food);
 
             if (_selectedThing != -1 && InputManager.KeyWentDown(Keys.G))
-                AddJob(JobType.Gather, _selectedThing);
+                AddJob(JobType.Gather, Team.Player, _selectedThing);
 
             if (InputManager.KeyWentDown(Keys.D))
-                AddJob(JobType.Distribute);
+                AddJob(JobType.Distribute, Team.Player);
+
+            if (_selectedJob != -1 && InputManager.KeyWentDown(Keys.Delete))
+                RemoveJob(_jobs[Team.Player][_selectedJob], Team.Player);
+
 
             for (short i = 0; i < _rightmostAntity; i++) {
                 if (!_antitiesSet[i]) continue;
@@ -135,7 +160,63 @@ namespace AiAndGamesJam {
                     case AntityType.Ant:
                         UpdateAnt(i, ref _antities[i], egt);
                         break;
+                    case AntityType.Tommy:
+                        UpdateTommy(i, ref _antities[i], egt);
+                        break;
                 }
+            }
+        }
+
+        private bool IsAllLost() {
+            if (_anthillCache[Team.Player].Count == 0)
+                return true;
+
+            return false;
+        }
+
+        private bool IsGoalSatisfied() {
+            switch (_goal) {
+                case GoalTypes.AmountOfFood:
+                    _goalCurrent = _anthillCache[Team.Player].Select(i => _antities[i].Value).Sum();
+                    return _goalCurrent >= _goalValue;
+                // TODO: add more goal states
+                default: return false;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void UpdateTommy(short _, ref Antity antity, double egt) {
+            switch (antity.Value) {
+                case 0:
+                    // Coming up
+                    int targetHeight = GraphicsDevice.Viewport.Height - _tommy.Height;
+                    if (antity.Position.Y > targetHeight) {
+                        float diff = (float)(TOMMY_SPEED * egt);
+                        if ((antity.Position.Y - targetHeight) <= diff) {
+                            antity.Value = 1;
+                            antity.CoolDown = 5 * _rand.NextDouble();
+                            antity.Position.Y = targetHeight;
+                        } else antity.Position.Y -= diff;
+                    }
+                    break;
+                case 1:
+                    // Going down...
+                    targetHeight = GraphicsDevice.Viewport.Height;
+                    if (antity.Position.Y < targetHeight) {
+                        float diff = (float)(TOMMY_SPEED * egt);
+                        if ((targetHeight - antity.Position.Y) <= diff) {
+                            antity.Value = 2;
+                            // antity.CoolDown = 30 + (60 * _rand.NextDouble());
+                            antity.Position.Y = targetHeight;
+                            antity.Position.X = (float)(200 + (_rand.NextDouble() * (GraphicsDevice.Viewport.Width - 200 - _tommy.Width)));
+                        } else antity.Position.Y += diff;
+                    }
+                    break;
+                case 2:
+                    // Hidden
+                    antity.Value = 0;
+                    break;
+                default: antity.CoolDown = 1; break;
             }
         }
 
@@ -177,7 +258,7 @@ namespace AiAndGamesJam {
                         return false;
                     int lowest = int.MaxValue;
                     short lowestAnthill = -1;
-                    foreach (var anthill in _anthillCache) {
+                    foreach (var anthill in _anthillCache[ant.Team]) {
                         if (_antities[anthill].Value >= lowest)
                             continue;
                         lowestAnthill = anthill;
@@ -217,7 +298,7 @@ namespace AiAndGamesJam {
                         return false;
                     int highest = int.MinValue;
                     short highestAnthill = -1;
-                    foreach (var anthill in _anthillCache) {
+                    foreach (var anthill in _anthillCache[ant.Team]) {
                         if (_antities[anthill].Value <= highest || _antities[anthill].Value <= 25)
                             continue;
                         highestAnthill = anthill;
@@ -307,7 +388,7 @@ namespace AiAndGamesJam {
                         // Delete food
                         RemoveThing(ant.Job.Target);
                         // Delete job(s)
-                        RemoveJobsFor(ant.Job.Target);
+                        RemoveJobsForThing(ant.Job.Target);
                         ant.Action = Actions.Idle;
                         ant.Job = null;
                         ant.TargetAntity = -1;
@@ -321,7 +402,7 @@ namespace AiAndGamesJam {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateAnt(short idx, ref Antity ant, double egt) {
-            if (ant.Age >= 120 && _rand.NextDouble() >= 0.99) {
+            if (ant.Age >= 600 && _rand.NextDouble() >= 0.99) {
                 RemoveAntity(idx);
                 return;
             }
@@ -329,8 +410,8 @@ namespace AiAndGamesJam {
             switch (ant.Action) {
                 case Actions.Idle: {
                         ant.CoolDown = 0.05;
-                        if (_rand.NextDouble() >= 0.9 && _expensiveThisLoop < MAX_EXPENSIVE) {
-                            ant.Job = SelectRandomJob();
+                        if (_rand.NextDouble() >= 0.95 && _expensiveThisLoop < MAX_EXPENSIVE) {
+                            ant.Job = SelectRandomJob(ant.Team);
                             if (ant.Job != null)
                                 ant.Action = Actions.Job;
                             _expensiveThisLoop++;
@@ -355,6 +436,9 @@ namespace AiAndGamesJam {
                         } else if (ant.Job.Type == JobType.Distribute) {
                             if (!UpdateAntDistribute(ref ant, ref diff, speed))
                                 break;
+                        } else if (ant.Job.Type == JobType.Attack) {
+                            if (!UpdateAntAttack(ref ant, ref diff, speed))
+                                break;
                         }
 
                         // Wiggle
@@ -371,6 +455,44 @@ namespace AiAndGamesJam {
                     ant.CoolDown = 0;
                     break;
             }
+        }
+
+        private bool UpdateAntAttack(ref Antity ant, ref Vector2 diff, float speed) {
+            // Going to attack
+            if (!_antitiesSet[ant.Job.Target]) {
+                // Target anthill got deleted?
+                ant.Action = Actions.Idle;
+                ant.Job = null;
+                ant.TargetAntity = -1;
+                ant.CoolDown = _rand.NextDouble();
+                return false;
+            }
+            ref Antity target = ref _antities[ant.Job.Target];
+            Vector2 targetPos = target.Position;
+            diff = targetPos - ant.Position;
+            float distance = diff.Length();
+            if ((distance - 5) < speed) {
+                // We're here!
+                ant.CoolDown = _rand.NextDouble() + 1;
+                target.Value--;
+                if (target.Value == 0) {
+                    var rotation = (float)_rand.NextDouble() * MathHelper.TwoPi;
+                    var move = new Vector2((float)System.Math.Cos(rotation), (float)System.Math.Sin(rotation));
+                    move.Normalize();
+                    ant.Position += move * speed;
+
+                    // Delete anthill
+                    RemoveAntity(ant.Job.Target);
+                    // Delete job(s)
+                    RemoveJobsForAntity(ant.Job.Target);
+                    ant.Action = Actions.Idle;
+                    ant.Job = null;
+                    ant.TargetAntity = -1;
+                    ant.CoolDown = _rand.NextDouble();
+                }
+                return false;
+            }
+            return true;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -394,6 +516,14 @@ namespace AiAndGamesJam {
                 }
                 _rightmostThing = newRightmost + 1;
                 _lastThingsTrim = totalSeconds;
+            }
+
+            if (totalSeconds - _goalTextLastUpdated >= 0.25) {
+                _goalText = _goal switch {
+                    GoalTypes.AmountOfFood => $"     {_goalCurrent / _goalValue,3:P0} Done",
+                    _ => "UNKNOWN",
+                };
+                _goalTextLastUpdated = totalSeconds;
             }
         }
     }

@@ -11,6 +11,7 @@ namespace AiAndGamesJam {
             { "food", null },
             { "bg", null },
             { "logo", null },
+            { "tommy", null },
         };
 
         static readonly Dictionary<string, SpriteFont> _fonts = new() {

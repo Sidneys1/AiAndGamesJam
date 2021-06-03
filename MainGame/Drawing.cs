@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework.Media;
 namespace AiAndGamesJam {
     public partial class AntGame {
         private Rectangle _leftPanelRect, _leftPanelSplitterRect;
-        private Texture2D _selectionPixel, _pixel, _antHill, _ant, _food, _bg, _logo;
+        private Texture2D _selectionPixel, _pixel, _antHill, _ant, _food, _bg, _logo, _tommy;
         private Vector2 _anthillOffset = new(24, 24), _antOffset = new(3, 2), _foodOffset = new(16, 16), _logoPos, _titlePos, _introPos;
         private SpriteFont _font, _largeFont, _pixelmix;
 
@@ -39,7 +39,7 @@ namespace AiAndGamesJam {
 
             GraphicsDevice.Clear(Color.Black);
             SpriteBatch.Begin();
-            var textColor = Color.Lerp(Color.Transparent, Color.White, (float)((gts - _introTime) / 2));
+            var textColor = Color.Lerp(Color.Transparent, Color.White, (float)((gts - _lastStateTime) / 2));
             SpriteBatch.DrawString(_largeFont, TITLE, _titlePos, textColor);
             SpriteBatch.DrawString(_font, INTRO, _introPos, textColor);
             SpriteBatch.End();
@@ -77,6 +77,10 @@ namespace AiAndGamesJam {
                     case AntityType.Ant:
                         DrawAnt(ref ent, i == _selectedAntity);
                         break;
+                    case AntityType.Tommy:
+                        if (ent.Value != 2)
+                            SpriteBatch.Draw(_tommy, ent.Position, Color.White);
+                        break;
                     default: continue;
                 }
             }
@@ -110,18 +114,21 @@ namespace AiAndGamesJam {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void DrawAnt(ref Antity ant, bool selected) {
             var pos = ant.Position;
-            if (selected) {
-                Vector2 padding = new(3);
-                Rectangle selection = new((pos - _antOffset - padding).ToPoint(), ((_antOffset * 2) + (padding * 2)).ToPoint());
-                DrawSelection(selection);
+            if (ant.Team == Team.Fireants) {
+                SpriteBatch.Draw(_ant, pos - _antOffset, FIRE_ANT_COLOR);
+            } else {
+                if (selected) {
+                    Vector2 padding = new(3);
+                    Rectangle selection = new((pos - _antOffset - padding).ToPoint(), ((_antOffset * 2) + (padding * 2)).ToPoint());
+                    DrawSelection(selection);
+                }
+                var color = ant.Age switch {
+                    >= 300 => ANT_OLD_AGE,
+                    >= 200 => ANT_MIDDLE_AGE,
+                    _ => Color.Black,
+                };
+                SpriteBatch.Draw(_ant, pos - _antOffset, color);
             }
-            pos = ant.Position;
-            var color = ant.Age switch {
-                >= 80 => ANT_OLD_AGE,
-                >= 40 => ANT_MIDDLE_AGE,
-                _ => Color.Black,
-            };
-            SpriteBatch.Draw(_ant, pos - _antOffset, color);
 
             if (ant.Value > 0)
                 SpriteBatch.Draw(_pixel, new Rectangle((int)pos.X, (int)pos.Y, 2, 2), Color.Green);
@@ -166,12 +173,20 @@ namespace AiAndGamesJam {
 
             textPos.X = 15;
             textPos.Y = 15;
-            SpriteBatch.DrawString(_font, "      DETAILS       ", textPos, Color.White);
+            SpriteBatch.DrawString(_font, "       GOAL", textPos, Color.White);
+            textPos.X = 20;
+            textPos.Y += 20;
+
+            SpriteBatch.DrawString(_font, _goalDesc + _goalText, textPos, Color.Gray);
+
+            textPos.X = 15;
+            textPos.Y = 75;
+            SpriteBatch.DrawString(_font, "      DETAILS", textPos, Color.White);
             textPos.X = 20;
             textPos.Y += 20;
             string detailLine;
             if (isJobSelected) {
-                Job job = _jobs[_selectedJob];
+                Job job = _jobs[Team.Player][_selectedJob];
                 detailLine = job.Type switch {
                     JobType.Gather => "   Gather Food",
                     JobType.Distribute => " Distribute Food",
@@ -211,17 +226,17 @@ namespace AiAndGamesJam {
             }
             SpriteBatch.DrawString(_font, detailLine, textPos, Color.Gray);
 
-            SpriteBatch.Draw(_pixel, _leftPanelSplitterRect, null, Color.Gray);
+            SpriteBatch.Draw(_pixel, _leftPanelSplitterRect, null, ANT_OLD_AGE);
 
             textPos.X = 10;
-            textPos.Y = 110;
+            textPos.Y = 155;
             SpriteBatch.DrawString(_font, "        JOBS        ", textPos, Color.White);
-            for (int i = 0; i < _jobs.Count; i++) {
+            for (int i = 0; i < _jobs[Team.Player].Count; i++) {
                 textPos.Y += 20;
                 if (i == _selectedJob)
-                    DrawSelection(new Rectangle(5, 125 + (i * 20), _leftPanelRect.Width - 10, 25));
+                    DrawSelection(new Rectangle(5, 170 + (i * 20), _leftPanelRect.Width - 10, 25));
 
-                Job job = _jobs[i];
+                Job job = _jobs[Team.Player][i];
                 string text = job.Type switch {
                     JobType.Gather => "Gather Food",
                     JobType.Distribute => "Distribute Food",

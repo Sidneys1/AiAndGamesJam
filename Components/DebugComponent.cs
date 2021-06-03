@@ -47,7 +47,7 @@ namespace AiAndGamesJam {
 
         public override void Update(GameTime gameTime) {
             if (!Enabled) return;
-            _ticks.PushFront(gameTime.ElapsedGameTime.Ticks);
+            _ticks.PushBack(gameTime.ElapsedGameTime.Ticks);
 
             if ((gameTime.TotalGameTime.TotalSeconds - _lastDebugUpdate) > 0.1) {
                 _cachedDebugLines.Clear();
@@ -66,7 +66,7 @@ namespace AiAndGamesJam {
                 return;
             }
             var delta = now - _last_frame;
-            _fps.PushFront(delta.Ticks);
+            _fps.PushBack(delta.Ticks);
             _last_frame = now;
 
 

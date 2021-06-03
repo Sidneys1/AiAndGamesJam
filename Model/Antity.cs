@@ -14,12 +14,13 @@ namespace AiAndGamesJam {
         None,
         Anthill,
         Ant,
+        Tommy,
     }
 
     enum Team : byte {
         None,
         Player,
-        AI
+        Fireants
     }
 
     struct Antity {

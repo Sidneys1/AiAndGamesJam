@@ -19,7 +19,8 @@ Creating more Ants consumes 20 food every 3 seconds as long as the Anthill has a
 
 |                Key | Description                                           |
 | -----------------: | :---------------------------------------------------- |
-|                ESC | Skip cutscenes or (during gameplay) exit the game.    |
+|                ESC | Exit the game.                                        |
+|              Enter | Skip cutscenes.                                       |
 |                 F1 | Enable debug overlay.                                 |
 |  Media-Previous/F2 | Previous music track.                                 |
 |      Media-Next/F3 | Next music track.                                     |
@@ -32,6 +33,7 @@ Creating more Ants consumes 20 food every 3 seconds as long as the Anthill has a
 |                  F | Select next (F)ood item.                              |
 |                  G | Create Job to (G)ather selected Food item.            |
 |                  D | Create Job to (d)istribute Food.                      |
+|                Del | Delete selected Job.                                  |
 |                  C | Task selected Anthill to (C)reate more Ants.          |
 |                  S | Task selected Anthill to (S)tockpile Food.            |
 |         Left Mouse | Select under the cursor (including Jobs in the menu). |
