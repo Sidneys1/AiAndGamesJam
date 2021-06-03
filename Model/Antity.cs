@@ -7,6 +7,7 @@ namespace AiAndGamesJam {
         NewAnts,
         Idle,
         Job,
+        Stockpile,
     }
 
     enum AntityType : byte {
@@ -35,6 +36,9 @@ namespace AiAndGamesJam {
         public static string[] AnthillActions = new[] {
             null,
             "New Ant in ",
+            null,
+            null,
+            null,
             null,
         };
     }

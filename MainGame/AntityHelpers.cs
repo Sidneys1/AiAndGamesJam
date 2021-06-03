@@ -91,6 +91,7 @@ namespace AiAndGamesJam {
             for (int i = 0; i < MAX_ANTITIES; i++) {
                 // LOOP
                 int actualSelection = _selectedAntity != -1 ? (i + _selectedAntity) % MAX_ANTITIES : i;
+                if (!_antitiesSet[actualSelection]) continue;
                 ref Antity ent = ref _antities[actualSelection];
 
                 if (actualSelection == _selectedAntity || ent.Team != Team.Player || ent.Type == AntityType.None) continue;
@@ -107,6 +108,5 @@ namespace AiAndGamesJam {
             if (next != -1)
                 _selectedJob = _selectedThing = -1;
         }
-
     }
 }

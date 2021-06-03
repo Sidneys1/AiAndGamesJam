@@ -18,7 +18,7 @@ namespace AiAndGamesJam {
                 }
             }
             if (pos == -1)
-                throw new Exception("All thing slots are taken!");
+                throw new System.Exception("All thing slots are taken!");
 
             if (pos >= _rightmostThing) _rightmostThing = pos + 1;
 
@@ -54,7 +54,7 @@ namespace AiAndGamesJam {
                             if (distance > 32) continue;
                             break;
                         default:
-                            Trace.WriteLine("MISSING COLLISION HANDLER IN FindNearestThing!");
+                            System.Diagnostics.Trace.WriteLine("MISSING COLLISION HANDLER IN FindNearestThing!");
                             break;
                     }
                 }
@@ -67,5 +67,27 @@ namespace AiAndGamesJam {
             return ret;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void SelectNextThing(ThingType? type = null) {
+            short next = -1;
+            for (short i = 0; i < MAX_THINGS; i++) {
+                // LOOP
+                short actualSelection = _selectedThing != -1 ? (short)((i + _selectedThing) % MAX_THINGS) : i;
+                if (!_thingsSet[actualSelection]) continue;
+
+                ref Thing thing = ref _things[actualSelection];
+
+                if (actualSelection == _selectedThing) continue;
+
+                if (type.HasValue && thing.Type != type.Value) continue;
+
+                next = actualSelection;
+                break;
+            }
+            _selectedThing = next;
+
+            if (next != -1)
+                _selectedJob = _selectedAntity = -1;
+        }
     }
 }

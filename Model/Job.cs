@@ -1,6 +1,7 @@
 namespace AiAndGamesJam {
     public enum JobType : byte {
         Gather,
+        Distribute,
     }
 
     public class Job {
