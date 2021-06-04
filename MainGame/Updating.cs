@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 
@@ -48,19 +49,25 @@ namespace AiAndGamesJam {
                 _expensiveDebug++;
             _expensiveThisLoop = 0;
 
-            if (IsGoalSatisfied()) {
-                _state = GameState.Won;
-                return;
-            }
 
-            if (IsAllLost()) {
-                _state = GameState.Lost;
-                return;
+            if (!_sandbox && InputManager.KeyWentDown(Keys.F5))
+                _sandbox = true;
+
+            if (!_sandbox) {
+                if (IsGoalSatisfied()) {
+                    _state = GameState.Won;
+                    return;
+                }
+
+                if (IsAllLost()) {
+                    _state = GameState.Lost;
+                    return;
+                }
             }
 
             UpdateTrims(gameTime);
 
-            if (InputManager.LeftMouseWentDown()) {
+            if (InputManager.LeftMouseWentDown) {
                 var mouse_position = InputManager.CurrentMouseState.Position.ToVector2();
                 if (mouse_position.X < _leftPanelRect.Width) {
                     int newSelection = (int)(mouse_position.Y - 185) / 20;
@@ -88,8 +95,61 @@ namespace AiAndGamesJam {
                 }
             }
 
-            if (InputManager.RightMouseWentDown())
-                AddThing(ThingType.Food, InputManager.CurrentMouseState.Position.ToVector2(), value: 100);
+            if (_sandbox) {
+                Vector2? addedFireant = null;
+                if (InputManager.RightMouseWentDown) {
+                    Vector2 position = InputManager.CurrentMouseState.Position.ToVector2();
+                    switch (_sandboxSelection) {
+                        case SandboxSelection.Food:
+                            AddThing(ThingType.Food, position, value: 100);
+                            break;
+                        case SandboxSelection.Anthill:
+                            AddAntity(AntityType.Anthill, Team.Player, position, Actions.Stockpile, value: 105);
+                            break;
+                        case SandboxSelection.Ant:
+                            AddAntity(AntityType.Ant, Team.Player, position, Actions.Idle, 1.0);
+                            break;
+                        case SandboxSelection.Fire_Ant:
+                            AddAntity(AntityType.Ant, Team.Fireants, position, Actions.Idle, 1.0);
+                            addedFireant = position;
+                            break;
+                    }
+                }
+                if (InputManager.CurrentKeyboardState.IsKeyDown(Keys.F6)) {
+                    for (int i = 0; i < 10; i++) {
+                        AddAntity(AntityType.Ant,
+                                  Team.Player,
+                                  new Vector2((float)(_rand.NextDouble() * (GraphicsDevice.Viewport.Width - 200)) + 200,
+                                              (float)(_rand.NextDouble() * GraphicsDevice.Viewport.Height)),
+                                  Actions.Idle,
+                                  1.0 + (_rand.NextDouble() - 0.5));
+                    }
+                }
+                if (InputManager.CurrentKeyboardState.IsKeyDown(Keys.F7)) {
+                    addedFireant = new Vector2((float)(_rand.NextDouble() * (GraphicsDevice.Viewport.Width - 200)) + 200,
+                                                              (float)(_rand.NextDouble() * GraphicsDevice.Viewport.Height));
+                    AddAntity(AntityType.Ant,
+                              Team.Fireants,
+                              addedFireant.Value,
+                              Actions.Idle,
+                              1.0 + (_rand.NextDouble() - 0.5));
+                }
+
+                if (addedFireant.HasValue && _firstSandboxFireant) {
+                    Vector2 position = addedFireant.Value;
+                    AddJob(JobType.Attack, Team.Fireants);
+                    _firstSandboxFireant = false;
+                }
+
+                int scrollwheelDelta = InputManager.ScrollwheelDelta;
+                if (scrollwheelDelta != 0) {
+                    if (scrollwheelDelta > 0) _sandboxSelection++;
+                    else _sandboxSelection--;
+
+                    if (_sandboxSelection == SandboxSelection.BEGIN) _sandboxSelection = SandboxSelection.Fire_Ant;
+                    else if (_sandboxSelection == SandboxSelection.END) _sandboxSelection = SandboxSelection.Anthill;
+                }
+            }
 
             if (InputManager.KeyWentDown(Keys.F1))
                 _debug.Enabled = !_debug.Enabled;
@@ -121,15 +181,16 @@ namespace AiAndGamesJam {
             if (InputManager.KeyWentDown(Keys.F))
                 SelectNextThing(ThingType.Food);
 
-            if (_selectedThing != -1 && InputManager.KeyWentDown(Keys.G))
+            if (InputManager.KeyWentDown(Keys.G))
                 AddJob(JobType.Gather, Team.Player, _selectedThing);
 
             if (InputManager.KeyWentDown(Keys.D))
                 AddJob(JobType.Distribute, Team.Player);
 
-            if (_selectedJob != -1 && InputManager.KeyWentDown(Keys.Delete))
+            if (_selectedJob != -1 && InputManager.KeyWentDown(Keys.Delete)) {
                 RemoveJob(_jobs[Team.Player][_selectedJob], Team.Player);
 
+            }
 
             for (short i = 0; i < _rightmostAntity; i++) {
                 if (!_antitiesSet[i]) continue;
@@ -153,11 +214,26 @@ namespace AiAndGamesJam {
                     continue;
                 }
 
+                Dictionary<Job, bool> jobCache = new();
+
                 switch (_antities[i].Type) {
                     case AntityType.Anthill:
                         UpdateAnthill(i, ref _antities[i], egt);
                         break;
                     case AntityType.Ant:
+                        Job j = _antities[i].Job;
+                        if (j != null) {
+                            if (!jobCache.TryGetValue(j, out bool valid)) {
+                                valid = _jobs[_antities[i].Team].Contains(j);
+                                jobCache.Add(j, valid);
+                            }
+                            if (!valid) {
+                                _antities[i].Job = null;
+                                _antities[i].CoolDown = _rand.NextDouble();
+                                _antities[i].Action = Actions.Idle;
+                                break;
+                            }
+                        }
                         UpdateAnt(i, ref _antities[i], egt);
                         break;
                     case AntityType.Tommy:
@@ -169,6 +245,16 @@ namespace AiAndGamesJam {
 
         private bool IsAllLost() {
             if (_anthillCache[Team.Player].Count == 0)
+                return true;
+
+            int remainingFood = 0;
+            for (short i = 0; i < _rightmostThing; i++) {
+                if (!_thingsSet[i] || _things[i].Type != ThingType.Food) continue;
+                ref Thing thing = ref _things[i];
+                remainingFood += thing.Value;
+            }
+
+            if ((_goalValue - _goalCurrent) > remainingFood)
                 return true;
 
             return false;
@@ -368,15 +454,24 @@ namespace AiAndGamesJam {
                 }
             } else {
                 // Going to food
-                if (!_thingsSet[ant.Job.Target]) {
+                short targetIdx = ant.Job.Target;
+                if (targetIdx == -1) targetIdx = ant.TargetAntity;
+                if (targetIdx == -1) targetIdx = ant.TargetAntity = FindNearestThing(ref ant.Position, ThingType.Food);
+
+                if (targetIdx == -1) {
+                    ant.Job = null;
+                    ant.Action = Actions.Idle;
+                    ant.TargetAntity = -1;
+                    return false;
+                }
+                if (!_thingsSet[targetIdx]) {
                     // Our food got deleted?
                     ant.Action = Actions.Idle;
                     ant.Job = null;
                     ant.TargetAntity = -1;
-                    ant.CoolDown = _rand.NextDouble();
                     return false;
                 }
-                ref Thing target = ref _things[ant.Job.Target];
+                ref Thing target = ref _things[targetIdx];
                 targetPos = target.Position;
                 diff = targetPos - ant.Position;
                 float distance = diff.Length();
@@ -386,13 +481,14 @@ namespace AiAndGamesJam {
                     target.Value -= ant.Value = 1;//Math.Min(1, target.Value);
                     if (target.Value == 0) {
                         // Delete food
-                        RemoveThing(ant.Job.Target);
+                        RemoveThing(targetIdx);
                         // Delete job(s)
-                        RemoveJobsForThing(ant.Job.Target);
-                        ant.Action = Actions.Idle;
-                        ant.Job = null;
-                        ant.TargetAntity = -1;
-                        ant.CoolDown = _rand.NextDouble();
+                        if (ant.Job.Target != -1) {
+                            RemoveJobsForThing(targetIdx);
+                            ant.Action = Actions.Idle;
+                            ant.Job = null;
+                            ant.TargetAntity = -1;
+                        }
                     }
                     return false;
                 }
@@ -459,7 +555,19 @@ namespace AiAndGamesJam {
 
         private bool UpdateAntAttack(ref Antity ant, ref Vector2 diff, float speed) {
             // Going to attack
-            if (!_antitiesSet[ant.Job.Target]) {
+            short targetIdx;
+
+            if (ant.Job.Target != -1) targetIdx = ant.Job.Target;
+            else if (ant.TargetAntity != -1) targetIdx = ant.TargetAntity;
+            else targetIdx = ant.TargetAntity = FindNearestAntity(ref ant.Position, AntityType.Anthill, ant.Team switch { Team.Fireants => Team.Player, _ => null });
+
+            if (targetIdx == -1) {
+                ant.CoolDown = _rand.NextDouble();
+                ant.Action = Actions.Idle;
+                return false;
+            }
+
+            if (!_antitiesSet[targetIdx]) {
                 // Target anthill got deleted?
                 ant.Action = Actions.Idle;
                 ant.Job = null;
@@ -467,7 +575,7 @@ namespace AiAndGamesJam {
                 ant.CoolDown = _rand.NextDouble();
                 return false;
             }
-            ref Antity target = ref _antities[ant.Job.Target];
+            ref Antity target = ref _antities[targetIdx];
             Vector2 targetPos = target.Position;
             diff = targetPos - ant.Position;
             float distance = diff.Length();
@@ -482,9 +590,9 @@ namespace AiAndGamesJam {
                     ant.Position += move * speed;
 
                     // Delete anthill
-                    RemoveAntity(ant.Job.Target);
+                    RemoveAntity(targetIdx);
                     // Delete job(s)
-                    RemoveJobsForAntity(ant.Job.Target);
+                    RemoveJobsForAntity(targetIdx);
                     ant.Action = Actions.Idle;
                     ant.Job = null;
                     ant.TargetAntity = -1;

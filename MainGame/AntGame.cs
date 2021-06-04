@@ -24,6 +24,15 @@ namespace AiAndGamesJam {
         Domination,
     }
 
+    public enum SandboxSelection {
+        BEGIN,
+        Anthill,
+        Food,
+        Ant,
+        Fire_Ant,
+        END
+    }
+
     public partial class AntGame : Game {
         private readonly GraphicsDeviceManager _graphics;
         public SpriteBatch SpriteBatch;
@@ -38,6 +47,8 @@ namespace AiAndGamesJam {
         private double _goalValue = 100, _goalCurrent = 0;
         private string _goalText, _goalDesc = "Stockpile 100 Food";
         private double _goalTextLastUpdated = 0;
+        private bool _sandbox = false, _firstSandboxFireant = true;
+        private SandboxSelection _sandboxSelection = SandboxSelection.Food;
 
         private void GenerateScenario() {
             _level++;
@@ -53,8 +64,8 @@ namespace AiAndGamesJam {
             }
 
             List<GoalTypes> goalOptions = new() {
-                GoalTypes.NumberOfAnts,
-                GoalTypes.AmountOfFood
+                // GoalTypes.NumberOfAnts,
+                GoalTypes.AmountOfFood,
             };
 
             foreach (var team in _jobs)
@@ -64,13 +75,13 @@ namespace AiAndGamesJam {
             int numAnts = 10;
 
             if (_level > 5) {
-                goalOptions.Add(GoalTypes.Survival);
+                // goalOptions.Add(GoalTypes.Survival);
                 numAnthills--;
                 numAnts -= 3;
             }
 
             if (_level > 10) {
-                goalOptions.Add(GoalTypes.Domination);
+                // goalOptions.Add(GoalTypes.Domination);
                 numAnthills--;
                 numAnts -= 5;
             }
@@ -166,6 +177,7 @@ namespace AiAndGamesJam {
             _graphics.PreferredBackBufferWidth = 1280;
             _graphics.PreferredBackBufferHeight = 720;
             _graphics.ApplyChanges();
+            Window.Title = "Ants";
 
             _leftPanelRect = new(Point.Zero, new Point(200, _graphics.PreferredBackBufferHeight));
             _leftPanelSplitterRect = new Rectangle(5, 150, _leftPanelRect.Width - 10, 1);
@@ -176,32 +188,32 @@ namespace AiAndGamesJam {
                 position: new Vector2(_rand.Next(216, _graphics.PreferredBackBufferWidth - 16), _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
                 action: Actions.Idle);
 
-            var hill = AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(600, 300), action: Actions.Stockpile, value: 5);
+            AddAntity(AntityType.Anthill, Team.Player, position: new Vector2(600, 300), action: Actions.Stockpile, value: 5);
 
-            AddAntity(
-                AntityType.Ant,
-                Team.Fireants,
-                position: new Vector2(_rand.Next(216, _graphics.PreferredBackBufferWidth - 16), _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
-                action: Actions.Idle);
+            // AddAntity(
+            //     AntityType.Ant,
+            //     Team.Fireants,
+            //     position: new Vector2(_rand.Next(216, _graphics.PreferredBackBufferWidth - 16), _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
+            //     action: Actions.Idle);
 
-            Trace.WriteLine(hill);
-            AddJob(JobType.Attack, Team.Fireants, hill);
-            // for (int i = 0; i < 2; i++) {
-            //     AddThing(ThingType.Food,
-            //              new Vector2(_rand.Next(216, _graphics.PreferredBackBufferWidth - 16),
-            //                          _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
-            //              value: 100);
-            // }
+            // Trace.WriteLine(hill);
+            // AddJob(JobType.Attack, Team.Fireants, hill);
+            for (int i = 0; i < 2; i++) {
+                AddThing(ThingType.Food,
+                         new Vector2(_rand.Next(216, _graphics.PreferredBackBufferWidth - 16),
+                                     _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
+                         value: 100);
+            }
 
-            // AddJob(JobType.Gather, 1);
+            AddJob(JobType.Gather, Team.Player);
 
-            // for (int i = 0; i < 10; i++) {
-            //     AddAntity(
-            //         AntityType.Ant,
-            //         Team.Player,
-            //         position: new Vector2(_rand.Next(216, _graphics.PreferredBackBufferWidth - 16), _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
-            //         action: Actions.Idle);
-            // }
+            for (int i = 0; i < 10; i++) {
+                AddAntity(
+                    AntityType.Ant,
+                    Team.Player,
+                    position: new Vector2(_rand.Next(216, _graphics.PreferredBackBufferWidth - 16), _rand.Next(16, _graphics.PreferredBackBufferHeight - 16)),
+                    action: Actions.Idle);
+            }
 
             base.Initialize();
         }

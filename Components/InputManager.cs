@@ -39,6 +39,8 @@ namespace AiAndGamesJam {
             }
         }
 
+        public static int ScrollwheelDelta => LastMouseState.ScrollWheelValue - CurrentMouseState.ScrollWheelValue;
+
         public static bool KeyWentUp(Keys k) => LastKeyboardState.IsKeyDown(k) && CurrentKeyboardState.IsKeyUp(k);
         public static bool KeyWentDown(Keys k) => LastKeyboardState.IsKeyUp(k) && CurrentKeyboardState.IsKeyDown(k);
 
@@ -60,10 +62,10 @@ namespace AiAndGamesJam {
             isKeyboardSwapped = !isKeyboardSwapped;
         }
 
-        internal static bool LeftMouseWentDown() =>
+        internal static bool LeftMouseWentDown =>
             LastMouseState.LeftButton == ButtonState.Released && CurrentMouseState.LeftButton == ButtonState.Pressed;
 
-        internal static bool RightMouseWentDown() =>
+        internal static bool RightMouseWentDown =>
             LastMouseState.RightButton == ButtonState.Released && CurrentMouseState.RightButton == ButtonState.Pressed;
     }
 }

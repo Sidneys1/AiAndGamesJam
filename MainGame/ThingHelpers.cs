@@ -9,9 +9,9 @@ namespace AiAndGamesJam {
         private double _lastThingsTrim = 0;
         private short _selectedThing = -1;
 
-        void AddThing(ThingType type, Vector2 position, int value = 0) {
-            var pos = -1;
-            for (int i = 0; i < MAX_THINGS; i++) {
+        short AddThing(ThingType type, Vector2 position, int value = 0) {
+            short pos = -1;
+            for (short i = 0; i < MAX_THINGS; i++) {
                 if (!_thingsSet[i]) {
                     pos = i;
                     break;
@@ -29,6 +29,7 @@ namespace AiAndGamesJam {
             thing.Value = value;
 
             _thingsSet[pos] = true;
+            return pos;
         }
 
         void RemoveThing(short pos) {

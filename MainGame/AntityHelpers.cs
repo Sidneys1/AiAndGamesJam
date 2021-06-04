@@ -23,8 +23,9 @@ namespace AiAndGamesJam {
                     break;
                 }
             }
+
             if (pos == -1)
-                throw new System.Exception("All entity slots are taken!");
+                return -1; // All entity slots are taken!
 
             if (pos >= _rightmostAntity) _rightmostAntity = pos + 1;
 

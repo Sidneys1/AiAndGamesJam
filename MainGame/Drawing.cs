@@ -87,6 +87,9 @@ namespace AiAndGamesJam {
 
             DrawPanel();
 
+            if (_sandbox)
+                SpriteBatch.DrawString(_pixelmix, $"SANDBOX: {_sandboxSelection.ToString().Replace('_', ' ')}", new Vector2(200, 0), Color.Magenta);
+
             _debug.Draw(gameTime);
 
             SpriteBatch.End();
@@ -177,7 +180,7 @@ namespace AiAndGamesJam {
             textPos.X = 20;
             textPos.Y += 20;
 
-            SpriteBatch.DrawString(_font, _goalDesc + _goalText, textPos, Color.Gray);
+            SpriteBatch.DrawString(_font, $"{_goalDesc}\n{_goalText}", textPos, Color.Gray);
 
             textPos.X = 15;
             textPos.Y = 75;
