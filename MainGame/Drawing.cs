@@ -220,7 +220,7 @@ namespace AiAndGamesJam {
                     },
                     _ => "    missingno",
                 };
-                detailLine += "\n\n" + antity.Type switch {
+                detailLine += "\n" + antity.Type switch {
                     AntityType.Anthill => $"    Food: {antity.Value}",
                     _ => "",
                 };

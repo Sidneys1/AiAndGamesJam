@@ -138,11 +138,11 @@ namespace AiAndGamesJam {
             }
 
             _goalDesc = _goal switch {
-                GoalTypes.AmountOfFood => $"Stockpile {_goalValue} Food\n",
-                GoalTypes.NumberOfAnts => $"  Have {_goalValue} Ants\n",
-                GoalTypes.NumberOfAnthills => $"Have {_goalValue} Anthills\n",
-                GoalTypes.Survival => $"Survive for {_goalValue}s\n",
-                GoalTypes.Domination => "Destroy all other Colonies\n",
+                GoalTypes.AmountOfFood => $"Stockpile {_goalValue} Food",
+                GoalTypes.NumberOfAnts => $"  Have {_goalValue} Ants",
+                GoalTypes.NumberOfAnthills => $"Have {_goalValue} Anthills",
+                GoalTypes.Survival => $"Survive for {_goalValue}s",
+                GoalTypes.Domination => "Destroy all other Colonies",
                 _ => "UNKNOWN",
             };
         }
